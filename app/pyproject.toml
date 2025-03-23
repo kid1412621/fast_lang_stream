@@ -1,0 +1,16 @@
+[project]
+name = "fast-lang-api"
+version = "0.1.0"
+description = "fastAPI + langChain"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.115.11",
+    "langchain>=0.3.21",
+    "langchain-ollama>=0.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.2",
+]

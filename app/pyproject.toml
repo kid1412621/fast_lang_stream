@@ -8,6 +8,7 @@ dependencies = [
     "fastapi[standard]>=0.115.11",
     "langchain>=0.3.21",
     "langchain-ollama>=0.3.0",
+    "pydantic-settings>=2.8.1",
 ]
 
 [dependency-groups]

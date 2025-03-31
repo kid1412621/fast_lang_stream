@@ -81,35 +81,18 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.CORS_ORIGINS)
 rate_limit_dict: Dict[str, Dict] = {}
 
 
-class QueryRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, max_length=4000)
-    model: str = Field(default=settings.DEFAULT_MODEL, pattern="^[a-zA-Z0-9._-]+$")
-    temperature: float = Field(default=settings.TEMPERATURE, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=settings.MAX_TOKENS, ge=1, le=4000)
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "prompt": "What is the capital of France?",
-                "model": settings.DEFAULT_MODEL,
-                "temperature": settings.TEMPERATURE,
-                "max_tokens": settings.MAX_TOKENS,
-            }
-        }
-    )
+# Pydantic models
+class Message(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
 
 
-class QueryResponse(BaseModel):
-    response: str
-    model: str
-    processing_time: float
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
-class StreamResponse(BaseModel):
-    type: str
-    data: Optional[str] = None
-    timestamp: Optional[datetime] = None
+class StreamRequest(BaseModel):
+    prompt: str
+    messages: list[Message] = []  # Previous conversation history
+    model: str = "llama3.2"
+    temperature: float = 0.7
+    max_tokens: int = 1000
 
 
 @lru_cache(maxsize=settings.CACHE_SIZE)
@@ -118,7 +101,7 @@ def get_llm(model: str, temperature: float, max_tokens: int) -> ChatOllama:
     return ChatOllama(
         model=model,
         temperature=temperature,
-        num_predict=max_tokens,  # Updated parameter name
+        max_tokens=max_tokens,
         streaming=True,
         # format="json",  # Enable JSON mode for better response handling
     )
@@ -207,55 +190,14 @@ async def health():
         return {"status": "degraded", "llm": "unavailable", "error": str(e)}
 
 
-@app.post("/query", response_model=QueryResponse)
-async def query(
-    request: QueryRequest,
-    background_tasks: BackgroundTasks,
-    _: bool = Depends(check_rate_limit),
-):
-    """Process a single query and return the response"""
-    try:
-        start_time = time.time()
-
-        llm = get_llm(
-            model=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-        )
-        chain = create_chain(llm)
-        response = chain.invoke({"input": request.prompt})
-
-        processing_time = time.time() - start_time
-
-        # Add cleanup task
-        background_tasks.add_task(cleanup_rate_limit)
-
-        response_text = (
-            str(response) if response is not None else "No response generated"
-        )
-
-        return QueryResponse(
-            response=response_text,
-            model=request.model,
-            processing_time=round(processing_time, 3),
-        )
-    except Exception as e:
-        logger.exception("Error in query endpoint")
-        raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while processing your request: {str(e)}",
-        )
-
-
 @app.post("/stream")
-async def stream(
-    request: QueryRequest,
-    background_tasks: BackgroundTasks,
-    _: bool = Depends(check_rate_limit),
-):
+async def stream(request: StreamRequest,
+                 background_tasks: BackgroundTasks,
+                 _: bool = Depends(check_rate_limit),
+                 ):
     """Stream response using Server-Sent Events (SSE)"""
 
-    async def event_generator() -> AsyncGenerator[str, None]:
+    async def event_generator():
         try:
             start_time = time.time()
 
@@ -264,20 +206,49 @@ async def stream(
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
             )
-            chain = create_chain(llm)
 
-            yield f"data: {json.dumps({'type': 'start', 'model': request.model})}\n\n"
+            # Convert previous messages to LangChain message format
+            messages = []
 
-            async for chunk in chain.astream({"input": request.prompt}):
-                if chunk:
-                    yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
+            # Always start with a system message
+            messages.append(SystemMessage(content="You are a helpful assistant."))
 
-            processing_time = time.time() - start_time
-            yield f"data: {json.dumps({'type': 'end', 'processing_time': round(processing_time, 3)})}\n\n"
+            # Add conversation history
+            for msg in request.messages:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    messages.append(AIMessage(content=msg.content))
+
+            # Add the current prompt
+            messages.append(HumanMessage(content=request.prompt))
+
+            # Log the conversation for debugging
+            logger.info(f"Processing conversation with {len(messages)} messages")
+
+            # Format SSE events properly
+            yield "data: {}\n\n".format(json.dumps({"type": "start"}))
+
+            # Stream the response
+            for chunk in llm.stream(messages):
+                if hasattr(chunk, 'content'):
+                    # Format as an SSE event
+                    yield "data: {}\n\n".format(json.dumps({
+                        "type": "chunk",
+                        "data": chunk.content
+                    }))
+
+            # Send completion event
+            yield "data: {}\n\n".format(json.dumps({
+                "type": "end"
+            }))
 
         except Exception as e:
             logger.exception(f"Error in streaming: {str(e)}")
-            yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+            yield "data: {}\n\n".format(json.dumps({
+                "type": "error",
+                "data": str(e)
+            }))
         finally:
             # Ensure cleanup task is added even in case of errors
             background_tasks.add_task(cleanup_rate_limit)

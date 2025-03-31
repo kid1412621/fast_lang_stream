@@ -19,11 +19,20 @@ for message in st.session_state.messages:
 def stream_response_sse(prompt, message_placeholder):
     url = "http://localhost:8000/stream"
     
+    # Prepare the request with conversation history
+    request_data = {
+        "prompt": prompt,
+        "messages": [
+            {"role": msg["role"], "content": msg["content"]} 
+            for msg in st.session_state.messages
+        ]
+    }
+    
     try:
         # Send the request
         with requests.post(
             url, 
-            json={"prompt": prompt},
+            json=request_data,
             stream=True,
             headers={"Accept": "text/event-stream"}
         ) as response:

@@ -56,7 +56,7 @@ def stream_response_sse(prompt, message_placeholder):
                                 chunk = data["data"]
                                 full_response += chunk
                                 # Update the placeholder with the current response
-                                message_placeholder.markdown(full_response + "▌")
+                                message_placeholder.markdown(f"{full_response}▌")
                             
                             elif data.get("type") == "end":
                                 # Final update without cursor
@@ -100,3 +100,9 @@ if prompt:
     
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+
+# Add a button to clear chat history
+with st.sidebar:
+    if st.button("Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()

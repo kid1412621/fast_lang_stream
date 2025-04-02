@@ -1,5 +1,5 @@
-# app/api_setup.py
-from fastapi import FastAPI, Request, HTTPException
+# api/setup.py
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -8,12 +8,13 @@ import time
 import os
 from core.config import settings
 from utils.logging import get_logger
+from utils.rate_limiter import RateLimitMiddleware
 
-logger = get_logger("api_setup")
+logger = get_logger("api/setup")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup logic here (if any)
+    # Startup logic here
     logger.info("Application startup")
     yield
     # Shutdown logic
@@ -28,6 +29,14 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
+    )
+    
+    # Add rate limiting middleware
+    app.add_middleware(
+        RateLimitMiddleware,
+        requests_per_minute=settings.RATE_LIMIT,
+        cleanup_interval=settings.CLEANUP_INTERVAL,
+        exclude_paths=["/docs", "/redoc", "/openapi.json", "/health", "/"]
     )
     
     # CORS middleware with better security

@@ -15,6 +15,7 @@ class Settings:
     CLEANUP_INTERVAL = int(os.getenv("CLEANUP_INTERVAL", "300"))
     
     # LLM settings
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
     DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "llama3.2")
     MAX_TOKENS = int(os.getenv("MAX_TOKENS", "1000"))
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))

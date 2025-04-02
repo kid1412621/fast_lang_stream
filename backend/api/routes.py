@@ -1,12 +1,14 @@
 # app/routes.py
-from fastapi import APIRouter, Query
+from typing import List
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
+import httpx
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 import json
 import time
 
 from core.config import settings
-from core.models import StreamRequest
+from core.models import ModelInfo, StreamRequest
 from core.llm import LLMManagerDep
 from utils.logging import get_logger
 
@@ -54,6 +56,37 @@ async def health(
     except Exception as e:
         logger.warning(f"Health check failed: {str(e)}")
         return {"status": "degraded", "llm": "unavailable", "error": str(e)}
+
+# seems langchain has no built-in support for model listing, use REST API instead
+# ollama just updated its API to check model capability to check if is multimodal or not, wait for realease
+# see: https://github.com/ollama/ollama/pull/10066
+@router.get("/models", response_model=List[ModelInfo])
+async def list_ollama_models():
+    """
+    Endpoint to list all available models from Ollama.
+    Fetches the list of available models from the Ollama API.
+    """
+    try:
+        # Use httpx to fetch the list of models from the Ollama API
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.OLLAMA_URL}/api/tags")
+
+        # Raise an HTTP exception if the request was not successful
+        response.raise_for_status()
+
+        # Parse the JSON response from the Ollama API
+        available_models = response.json()
+
+        return available_models["models"]
+    except httpx.RequestError as e:
+        # Handle request-related errors
+        return {"error": f"An error occurred while requesting the Ollama API: {str(e)}"}
+    except httpx.HTTPStatusError as e:
+        # Handle HTTP errors (e.g., 4xx or 5xx)
+        return {"error": f"Ollama API returned an error: {e.response.status_code} - {e.response.text}"}
+    except Exception as e:
+        # Handle any other exceptions
+        return {"error": f"An unexpected error occurred: {str(e)}"}
 
 @router.post("/stream")
 async def stream(

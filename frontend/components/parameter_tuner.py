@@ -90,19 +90,15 @@ class ParameterTuner:
         st.header("Parameter Settings")
         # Parameter presets
         if show_presets:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.caption("Parameter Presets:")
-            with col2:
-                current_preset = params.get("preset", "balanced")
-                new_preset = st.selectbox(
-                    "Preset",
-                    options=["balanced", "creative", "precise", "concise"],
-                    index=["balanced", "creative", "precise", "concise"].index(current_preset),
-                    label_visibility="collapsed"
-                )
-                
-                if new_preset != current_preset:
+            current_preset = params.get("preset", "balanced")
+            new_preset = st.selectbox(
+                "Preset",
+                options=["balanced", "creative", "precise", "concise"],
+                index=["balanced", "creative", "precise", "concise"].index(current_preset),
+                label_visibility="collapsed"
+            )
+            
+            if new_preset != current_preset:
                     self._apply_preset(new_preset)
                     if on_change:
                         on_change()

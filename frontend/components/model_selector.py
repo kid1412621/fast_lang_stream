@@ -4,7 +4,6 @@ import requests
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Callable
 
-
 class ModelSelector:
     """
     A reusable component for selecting LLM models in Streamlit apps.
@@ -71,7 +70,6 @@ class ModelSelector:
         """Display detailed information about a model"""
         details = model.get("details", {})
 
-        st.caption("Model Details:")
         col1, col2 = st.columns(2)
         with col1:
             st.write(f"**Family:** {details.get('family', 'N/A')}")
@@ -102,9 +100,9 @@ class ModelSelector:
         Returns:
             Tuple containing (selected_model_name, selected_model_data)
         """
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([5, 1])
         with col1:
-            st.header("Model Selection:")
+            st.header("Model Selection")
         with col2:
             # Add a button to refresh model list if requested
             if show_refresh:
@@ -142,7 +140,8 @@ class ModelSelector:
 
             # Show model details if requested
             if show_details:
-                self._display_model_details(selected_model_data)
+                with st.expander("Model Details"):
+                    self._display_model_details(selected_model_data)
 
         else:
             st.warning("No models available. Please check your API connection.")

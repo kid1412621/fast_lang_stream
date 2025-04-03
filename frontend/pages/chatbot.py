@@ -1,12 +1,28 @@
-# streamlit_app.py
+# chatbot.py
 import streamlit as st
-import requests
+from components.api_status_indicator import APIStatusIndicator
 from components.model_selector import ModelSelector
 from components.parameter_tuner import ParameterTuner
 from components.sse_streamer import SSEStreamer
 
 st.set_page_config(page_title="Chat with Ollama", page_icon="💬")
 st.title("💬 Chat with Ollama")
+
+col1, col2 = st.columns([3, 1])
+with col1:
+    # Add API status indicator in the header
+    status_indicator = APIStatusIndicator(
+        api_url="http://localhost:8000/health", service_name="Ollama API"
+    )
+    status_indicator.render()
+
+with col2:
+    # Add a button to clear chat history
+    if st.button("Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()
+
+st.divider()
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -23,7 +39,7 @@ with st.sidebar:
     model_selector = ModelSelector()
     selected_model, model_data = model_selector.render()
 
-    st.markdown("---")
+    st.divider()
 
     # Use the ParameterTuner component
     parameter_tuner = ParameterTuner()
@@ -33,11 +49,8 @@ with st.sidebar:
 # Initialize the SSE streamer
 streamer = SSEStreamer(api_url="http://localhost:8000/stream")
 
-# Chat input
-prompt = st.chat_input("Say something...")
-
 # Handle the conversation
-if prompt:
+if prompt := st.chat_input("Say something..."):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
 
@@ -74,26 +87,3 @@ if prompt:
         # Stream the response directly using st.write_stream
         spinner_text = f"Connecting to {selected_model}..."
         streamer.stream(request_data=request_data, on_complete=on_complete, spinner_text=spinner_text)
-
-# Add API status indicator in the footer
-st.markdown("---")
-col1, col2 = st.columns([3, 1])
-with col1:
-    try:
-        health_response = requests.get("http://localhost:8000/health")
-        if health_response.status_code == 200:
-            data = health_response.json()
-            if data.get("status") == "healthy":
-                st.markdown("✅ API server is online")
-            else:
-                st.markdown("⚠️ API server status: " + data.get("status", "unknown"))
-        else:
-            st.markdown("❌ API server is experiencing issues")
-    except:
-        st.markdown("❌ API server is offline")
-
-with col2:
-    # Add a button to clear chat history
-    if st.button("Clear Conversation"):
-        st.session_state.messages = []
-        st.rerun()

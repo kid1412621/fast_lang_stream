@@ -13,7 +13,8 @@ This project aims to implement modern python solution(like, uv and FastAPI) for 
   - Model selection
   - Model parameters setting
   - Ollama health check
-2. image descriptor
+2. [image descriptor](image_descriptor) ([code](./frontend/pages/image_descriptor.py))
+  - describe user uploaded image
 
 ## Stack
 

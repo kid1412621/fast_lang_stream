@@ -13,6 +13,7 @@ class ModelSelector:
     - Displays model details
     - Handles model selection
     - Caches model data in session state
+    - Supports filtering for multimodal models
     """
 
     def __init__(
@@ -20,6 +21,7 @@ class ModelSelector:
         api_url: str = "http://localhost:8000/models",
         session_key: str = "models_data",
         default_model: str = "llama3.2",
+        multimodal_only: bool = False
     ):
         """
         Initialize the model selector component.
@@ -28,10 +30,12 @@ class ModelSelector:
             api_url: URL to fetch models from
             session_key: Key to use for storing models in session state
             default_model: Fallback model if none are available
+            multimodal_only: Whether to only show models with vision capabilities
         """
         self.api_url = api_url
         self.session_key = session_key
         self.default_model = default_model
+        self.multimodal_only = multimodal_only
 
         # Initialize session state if needed
         if self.session_key not in st.session_state:
@@ -44,12 +48,42 @@ class ModelSelector:
             if response.status_code == 200:
                 models = response.json()
                 if isinstance(models, list) and len(models) > 0:
+                    # Filter for multimodal models if requested
+                    if self.multimodal_only:
+                        models = [model for model in models if self._is_multimodal_model(model)]
+                    
                     st.session_state[self.session_key] = models
                     return models
             return []
         except Exception as e:
             st.error(f"Failed to fetch models: {e}")
             return []
+            
+    # TODO:
+    # ollama just updated its API to check model capability to check if is multimodal or not, wait for realease
+    # see: https://github.com/ollama/ollama/pull/10066
+    # Update the _is_multimodal_model method once the API is released
+    def _is_multimodal_model(self, model: Dict) -> bool:
+        """Check if a model has multimodal capabilities"""
+        name = model.get("name", "").lower()
+        details = model.get("details", {})
+        tags = details.get("tags", [])
+        family = details.get("family", "").lower()
+        
+        return any([
+            "gemma3" in name,
+            "llava" in name,
+            "vision" in name,
+            "clip" in name,
+            "multimodal" in name,
+            "visual" in name,
+            "image" in name,
+            "bakllava" in name,
+            "llava" in family,
+            "vision" in tags,
+            "multimodal" in tags,
+            "image" in tags
+        ])
 
     def _format_model_display(self, model: Dict) -> str:
         """Format a model for display in the dropdown"""
@@ -63,6 +97,10 @@ class ModelSelector:
             display = f"{name} ({param_size}{', ' + quant if quant else ''})"
         else:
             display = name
+
+        # Add a visual indicator for multimodal models
+        if self._is_multimodal_model(model):
+            display = "🖼️ " + display
 
         return display
 
@@ -85,6 +123,10 @@ class ModelSelector:
                 st.write(f"**Last Updated:** {modified_date.strftime('%Y-%m-%d')}")
             except (ValueError, TypeError):
                 pass
+                
+        # Show multimodal capabilities if present
+        if self._is_multimodal_model(model):
+            st.write("**Capabilities:** 🖼️ Vision/Multimodal")
 
     def render(
         self, on_change: Optional[Callable] = None, show_refresh: bool = True, show_details: bool = True
@@ -142,9 +184,17 @@ class ModelSelector:
             if show_details:
                 with st.expander("Model Details"):
                     self._display_model_details(selected_model_data)
+                    
+            # Show warning if multimodal_only is set but no multimodal models are found
+            if self.multimodal_only and not any(self._is_multimodal_model(model) for model in models_data):
+                st.warning("No multimodal models found. Please install models with vision capabilities like LLaVA.")
 
         else:
-            st.warning("No models available. Please check your API connection.")
+            if self.multimodal_only:
+                st.warning("No multimodal models available. Please install models with vision capabilities like LLaVA.")
+            else:
+                st.warning("No models available. Please check your API connection.")
+                
             selected_model = self.default_model
             selected_model_data = {}
 

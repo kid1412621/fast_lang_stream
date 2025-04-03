@@ -2,7 +2,10 @@
 import streamlit as st
 import requests
 import json
-from typing import Dict, Optional, Callable, Generator
+import base64
+from PIL import Image
+from io import BytesIO
+from typing import Dict, Optional, Callable, Generator, List, Union
 
 class SSEStreamer:
     """
@@ -12,6 +15,7 @@ class SSEStreamer:
     - Handles SSE format parsing
     - Uses st.write_stream for efficient streaming
     - Provides error handling
+    - Supports image data in requests
     """
     
     def __init__(
@@ -23,7 +27,6 @@ class SSEStreamer:
         
         Args:
             api_url: URL for the streaming API endpoint
-            cursor_char: Character to display as a cursor during streaming
         """
         self.api_url = api_url
     
@@ -48,9 +51,61 @@ class SSEStreamer:
                         except json.JSONDecodeError:
                             continue
     
+    def _encode_image(self, image: Union[Image.Image, str, bytes]) -> str:
+        """
+        Encode an image to base64 for API transmission.
+        
+        Args:
+            image: PIL Image object, file path, or bytes
+            
+        Returns:
+            Base64 encoded image string
+        """
+        # If image is already a string, assume it's a path
+        if isinstance(image, str):
+            with open(image, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode("utf-8")
+                
+        # If image is bytes, encode directly
+        elif isinstance(image, bytes):
+            return base64.b64encode(image).decode("utf-8")
+            
+        # If image is a PIL Image, convert to bytes first
+        elif isinstance(image, Image.Image):
+            buffered = BytesIO()
+            image.save(buffered, format="PNG")
+            return base64.b64encode(buffered.getvalue()).decode("utf-8")
+            
+        else:
+            raise TypeError("Image must be a PIL Image, file path, or bytes")
+    
+    def _prepare_request_with_images(self, request_data: Dict, images: List[Union[Image.Image, str, bytes]]) -> Dict:
+        """
+        Prepare request data with encoded images.
+        
+        Args:
+            request_data: Original request data
+            images: List of images to include
+            
+        Returns:
+            Updated request data with images
+        """
+        # Create a copy of the request data
+        updated_request = request_data.copy()
+        
+        # Encode images
+        encoded_images = [self._encode_image(img) for img in images]
+        
+        # Add images to request based on API format
+        # This format may need adjustment based on your specific API requirements
+        updated_request["images"] = encoded_images
+        
+        return updated_request
+    
     def stream(
         self,
         request_data: Dict,
+        images: Optional[List[Union[Image.Image, str, bytes]]] = None,
         on_complete: Optional[Callable[[str], None]] = None,
         spinner_text: str = "Connecting..."
     ) -> str:
@@ -59,6 +114,7 @@ class SSEStreamer:
         
         Args:
             request_data: Data to send in the request
+            images: Optional list of images to include in the request
             on_complete: Callback to execute when streaming is complete
             spinner_text: Text to show in the spinner while connecting
             
@@ -66,6 +122,10 @@ class SSEStreamer:
             The full response text
         """
         try:
+            # Prepare request data with images if provided
+            if images:
+                request_data = self._prepare_request_with_images(request_data, images)
+            
             # Create the request
             with st.spinner(spinner_text):
                 response = requests.post(

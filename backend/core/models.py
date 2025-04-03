@@ -2,18 +2,23 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from core.config import settings
 
 class Message(BaseModel):
-    role: str  # "user" or "assistant"
+    """Message model for chat conversations"""
+    role: str
     content: str
 
 class StreamRequest(BaseModel):
+    """Request model for streaming responses"""
     prompt: str
-    messages: List[Message] = Field(default_factory=list)  # Previous conversation history
-    model: str = settings.DEFAULT_MODEL
-    temperature: float = settings.TEMPERATURE
-    max_tokens: int = settings.MAX_TOKENS
+    messages: List[Message] = []
+    model: str = Field(..., description="The model to use for generation")
+    temperature: float = 0.7
+    max_tokens: int = 500
+    top_p: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    images: Optional[List[str]] = None  # Add support for base64 encoded images
 
 # Define the details structure
 class ModelDetails(BaseModel):
@@ -23,6 +28,8 @@ class ModelDetails(BaseModel):
     families: List[str]
     parameter_size: str
     quantization_level: str
+    # TODO
+    tags: List[str]
 
 # Define the structure for each model
 class ModelInfo(BaseModel):

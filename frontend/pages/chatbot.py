@@ -5,6 +5,8 @@ from components.model_selector import ModelSelector
 from components.parameter_tuner import ParameterTuner
 from components.sse_streamer import SSEStreamer
 
+page_id = "chatbot"
+
 st.set_page_config(page_title="Chat with Ollama", page_icon="💬")
 st.title("💬 Chat with Ollama")
 
@@ -19,30 +21,32 @@ with col1:
 with col2:
     # Add a button to clear chat history
     if st.button("Clear Conversation"):
-        st.session_state.messages = []
+        st.session_state[page_id]["messages"] = []
         st.rerun()
 
 st.divider()
 
 # Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if page_id not in st.session_state:
+    st.session_state[page_id] = {}
+    st.session_state[page_id]["messages"] = []
 
 # Display chat history
-for message in st.session_state.messages:
+for message in st.session_state[page_id]["messages"]:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["role"] in ["user", "assistant"]:
+            st.markdown(message["content"])
 
 # Sidebar for model parameters
 with st.sidebar:
     # Use the ModelSelector component
-    model_selector = ModelSelector()
+    model_selector = ModelSelector(session_key="chatbot_model", multimodal_only=False)
     selected_model, model_data = model_selector.render()
 
     st.divider()
 
     # Use the ParameterTuner component
-    parameter_tuner = ParameterTuner()
+    parameter_tuner = ParameterTuner(session_key="chatbot_params")
     params = parameter_tuner.render()
 
 
@@ -51,8 +55,13 @@ streamer = SSEStreamer(api_url="http://localhost:8000/stream")
 
 # Handle the conversation
 if prompt := st.chat_input("Say something..."):
+    # system promp
+    st.session_state[page_id]["messages"].append(
+        {"role": "system", "content": "You are a helpful assistant to response user's questions."}
+    )
+
     # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state[page_id]["messages"].append({"role": "user", "content": prompt})
 
     # Display user message
     with st.chat_message("user"):
@@ -60,11 +69,10 @@ if prompt := st.chat_input("Say something..."):
 
     # Prepare the request data
     request_data = {
-        "prompt": prompt,
         "messages": [
             {"role": msg["role"], "content": msg["content"]}
-            for msg in st.session_state.messages
-            if msg["role"] in ["user", "assistant"]
+            for msg in st.session_state[page_id]["messages"]
+            if msg["role"] in ["user", "assistant", "system"]
         ],
         "model": selected_model,
         "temperature": params["temperature"],
@@ -82,7 +90,7 @@ if prompt := st.chat_input("Say something..."):
         def on_complete(response):
             # Add assistant response to chat history
             if not response.startswith("Error:"):
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.session_state[page_id]["messages"].append({"role": "assistant", "content": response})
 
         # Stream the response directly using st.write_stream
         spinner_text = f"Connecting to {selected_model}..."

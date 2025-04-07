@@ -57,6 +57,7 @@ async def health(
         logger.warning(f"Health check failed: {str(e)}")
         return {"status": "degraded", "llm": "unavailable", "error": str(e)}
 
+
 # seems langchain has no built-in support for model listing, use REST API instead
 # ollama just updated its API to check model capability to check if is multimodal or not, wait for realease
 # see: https://github.com/ollama/ollama/pull/10066
@@ -83,14 +84,14 @@ async def list_ollama_models(llm_manager: LLMManagerDep):
             # Check if model is multimodal based on name patterns
             name = model["name"].lower()
             model["details"] = model.get("details", {})
-            
+
             # Add multimodal capability flag using the utility method
             is_multimodal = llm_manager.is_multimodal_model(name)
-            
+
             # Add tags if not present
             if "tags" not in model["details"]:
                 model["details"]["tags"] = []
-                
+
             # Add multimodal tag if applicable
             if is_multimodal and "multimodal" not in model["details"]["tags"]:
                 model["details"]["tags"].append("multimodal")
@@ -129,46 +130,44 @@ async def stream(
             )
 
             # Convert previous messages to LangChain message format
-            messages = [SystemMessage(content="You are a helpful assistant.")]
+            messages = []
 
-            # Check if we're dealing with a multimodal model
-            is_multimodal = llm_manager.is_multimodal_model(request.model)
-            has_images = hasattr(request, 'images') and request.images
+            has_images = hasattr(request, "images") and request.images
 
             # Add conversation history
             for msg in request.messages:
                 if msg.role == "user":
-                    # Check if this message has images and is the latest message
-                    if is_multimodal and has_images and msg == request.messages[-1]:
-                        # Create a multimodal message with text and images
-                        multimodal_msg = llm_manager.create_multimodal_message(
+                    message_images = (
+                        request.images
+                        if (msg == request.messages[-1] and has_images)
+                        else None
+                    )
+
+                    # Create and add the user message
+                    messages.append(
+                        llm_manager.create_user_message(
                             text_content=msg.content,
-                            image_data=request.images
+                            image_data=message_images,
+                            model=request.model,
                         )
-                        messages.append(multimodal_msg)
-                    else:
-                        # Regular text message
-                        messages.append(HumanMessage(content=msg.content))
+                    )
                 elif msg.role == "assistant":
                     messages.append(AIMessage(content=msg.content))
+                elif (
+                    msg.role == "system" or msg.role == "developer"
+                ):  # compatible with openAI
+                    messages.append(SystemMessage(content=msg.content))
 
-            # If no messages were added but we have a prompt, add it
-            if len(messages) == 1 and request.prompt:  # Only system message was added
-                if is_multimodal and has_images:
-                    # Create a multimodal message with the prompt and images
-                    multimodal_msg = llm_manager.create_multimodal_message(
-                        text_content=request.prompt,
-                        image_data=request.images
-                    )
-                    messages.append(multimodal_msg)
-                else:
-                    # Regular text prompt
-                    messages.append(HumanMessage(content=request.prompt))
+            # If no messages were added, add default system prompt
+            if len(messages) == 0:
+                messages.append(SystemMessage(content="You are a helpful assistant."))
 
             # Log the conversation for debugging
             logger.info(f"Processing conversation with {len(messages)} messages")
             if has_images:
                 logger.info(f"Request includes {len(request.images)} images")
+            if request.allow_image_generation:
+                logger.info("Image generation is enabled for this request")
 
             # Format SSE events properly using f-strings
             yield f"data: {json.dumps({'type': 'start'})}\n\n"

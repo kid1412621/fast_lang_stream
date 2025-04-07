@@ -33,8 +33,7 @@ class ModelDetails(BaseModel):
     families: List[str]
     parameter_size: str
     quantization_level: str
-    # TODO
-    tags: List[str]
+    capacities: List[str] = []
 
 
 # Define the structure for each model
@@ -45,3 +44,4 @@ class ModelInfo(BaseModel):
     size: int
     digest: str
     details: ModelDetails
+    multimodal: bool = False

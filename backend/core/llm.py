@@ -1,11 +1,11 @@
 # core/llm.py
 import logging
-from typing import Dict, Tuple, Annotated, List, Optional, Any, Union
+from typing import Dict, Tuple, Annotated, List, Optional, Any
 from langchain_ollama import ChatOllama
 from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from langchain.schema import SystemMessage
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from fastapi import Depends
 
 logger = logging.getLogger("llm")
@@ -97,31 +97,6 @@ class LLMManager:
 
         # Return multimodal message
         return HumanMessage(content=content)
-
-    def is_multimodal_model(self, model_name: str) -> bool:
-        """
-        Check if a model has multimodal capabilities based on its name.
-
-        Args:
-            model_name: The name of the model to check
-
-        Returns:
-            True if the model is likely multimodal, False otherwise
-        """
-        model_name = model_name.lower()
-        return any(
-            [
-                "gemma3" in model_name,
-                "llava" in model_name,
-                "vision" in model_name,
-                "clip" in model_name,
-                "multimodal" in model_name,
-                "visual" in model_name,
-                "image" in model_name,
-                "bakllava" in model_name,
-            ]
-        )
-
 
 # Create a global instance
 llm_manager = None

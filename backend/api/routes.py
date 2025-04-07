@@ -3,14 +3,16 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 import httpx
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import AIMessage, SystemMessage
 import json
 import time
 
 from core.config import settings
 from core.models import ModelInfo, StreamRequest
 from core.llm import LLMManagerDep
+from core.ollama import OllamaAIPDep
 from utils.logging import get_logger
+from utils.version import is_version_at_least
 
 # Set up logger
 logger = get_logger("routes")
@@ -59,42 +61,30 @@ async def health(
 
 
 # seems langchain has no built-in support for model listing, use REST API instead
-# ollama just updated its API to check model capability to check if is multimodal or not, wait for realease
-# see: https://github.com/ollama/ollama/pull/10066
 @router.get("/models", response_model=List[ModelInfo])
-async def list_ollama_models(llm_manager: LLMManagerDep):
+async def list_ollama_models(ollama: OllamaAIPDep):
     """
     Endpoint to list all available models from Ollama.
     Fetches the list of available models from the Ollama API.
     """
     try:
-        # Use httpx to fetch the list of models from the Ollama API
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.OLLAMA_URL}/api/tags")
-
-        # Raise an HTTP exception if the request was not successful
-        response.raise_for_status()
-
-        # Parse the JSON response from the Ollama API
-        available_models = response.json()
-
-        # Enhanced model info with multimodal capability detection
-        models = available_models["models"]
+        models = await ollama.models()
+        current_version = await ollama.version()
+        detect_from_capabilities = is_version_at_least(current_version, "0.6.4")
         for model in models:
             # Check if model is multimodal based on name patterns
             name = model["name"].lower()
             model["details"] = model.get("details", {})
 
-            # Add multimodal capability flag using the utility method
-            is_multimodal = llm_manager.is_multimodal_model(name)
+            capabilities = (
+                await ollama.capabilities(name) if detect_from_capabilities else []
+            )
+            is_multimodal = await ollama.is_multimodal_model(
+                model_name=name, capabilities=capabilities
+            )
 
-            # Add tags if not present
-            if "tags" not in model["details"]:
-                model["details"]["tags"] = []
-
-            # Add multimodal tag if applicable
-            if is_multimodal and "multimodal" not in model["details"]["tags"]:
-                model["details"]["tags"].append("multimodal")
+            model["multimodal"] = is_multimodal
+            model["details"]["capabilities"] = capabilities
 
         return models
     except httpx.RequestError as e:

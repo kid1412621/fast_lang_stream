@@ -50,7 +50,7 @@ class ModelSelector:
                 if isinstance(models, list) and len(models) > 0:
                     # Filter for multimodal models if requested
                     if self.multimodal_only:
-                        models = [model for model in models if self._is_multimodal_model(model)]
+                        models = [model for model in models if model["multimodal"]]
                     
                     st.session_state[self.session_key] = models
                     return models
@@ -59,32 +59,6 @@ class ModelSelector:
             st.error(f"Failed to fetch models: {e}")
             return []
             
-    # TODO:
-    # ollama just updated its API to check model capability to check if is multimodal or not, wait for realease
-    # see: https://github.com/ollama/ollama/pull/10066
-    # Update the _is_multimodal_model method once the API is released
-    def _is_multimodal_model(self, model: Dict) -> bool:
-        """Check if a model has multimodal capabilities"""
-        name = model.get("name", "").lower()
-        details = model.get("details", {})
-        tags = details.get("tags", [])
-        family = details.get("family", "").lower()
-        
-        return any([
-            "gemma3" in name,
-            "llava" in name,
-            "vision" in name,
-            "clip" in name,
-            "multimodal" in name,
-            "visual" in name,
-            "image" in name,
-            "bakllava" in name,
-            "llava" in family,
-            "vision" in tags,
-            "multimodal" in tags,
-            "image" in tags
-        ])
-
     def _format_model_display(self, model: Dict) -> str:
         """Format a model for display in the dropdown"""
         details = model.get("details", {})
@@ -99,7 +73,7 @@ class ModelSelector:
             display = name
 
         # Add a visual indicator for multimodal models
-        if self._is_multimodal_model(model):
+        if model["multimodal"]:
             display = "🖼️ " + display
 
         return display
@@ -125,7 +99,7 @@ class ModelSelector:
                 pass
                 
         # Show multimodal capabilities if present
-        if self._is_multimodal_model(model):
+        if model["multimodal"]:
             st.write("**Capabilities:** 🖼️ Vision/Multimodal")
 
     def render(
@@ -186,7 +160,7 @@ class ModelSelector:
                     self._display_model_details(selected_model_data)
                     
             # Show warning if multimodal_only is set but no multimodal models are found
-            if self.multimodal_only and not any(self._is_multimodal_model(model) for model in models_data):
+            if self.multimodal_only and not any(model["multimodal"] for model in models_data):
                 st.warning("No multimodal models found. Please install models with vision capabilities like LLaVA.")
 
         else:

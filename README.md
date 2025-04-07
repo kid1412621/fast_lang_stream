@@ -1,4 +1,4 @@
-# Welcome to FastAPI + LangChain + Streamlit examples! 👋
+# Welcome to Ollama + FastAPI + LangChain + Streamlit examples! 👋
 
 Why another template project while bunch of similar ones out there?
 
